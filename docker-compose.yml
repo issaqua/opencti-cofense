@@ -1,0 +1,19 @@
+version: '3'
+services:
+  connector-cofense:
+    image: opencti/connector-cofense:5.5.4
+    environment:
+      - OPENCTI_URL=http://localhost
+      - OPENCTI_TOKEN=ChangeMe
+      - CONNECTOR_ID=ChangeMe
+      - CONNECTOR_TYPE=EXTERNAL_IMPORT
+      - CONNECTOR_NAME=COFENSE
+      - CONNECTOR_SCOPE=cofense
+      - CONNECTOR_CONFIDENCE_LEVEL=100 # From 0 (Unknown) to 100 (Fully trusted)
+      - CONNECTOR_UPDATE_EXISTING_DATA=false
+      - CONNECTOR_LOG_LEVEL=info
+      - COFENSE_URL=http://localhost # Required
+      - COFENSE_KEY=ChangeMe # Required
+      - COFENSE_SSL_VERIFY=false # Required
+      - COFENSE_INTERVAL=60 # Required, in minutes
+    restart: always
