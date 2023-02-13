@@ -3,9 +3,20 @@ opencti:
   token: 'ChangeMe'
 
 connector:
-  id: 'ChangeMe'
-  type: 'Template_Type'
-  name: 'Template'
-  scope: 'Template_Scope' # MIME type or SCO
-  confidence_level: 100 # From 0 (Unknown) to 100 (Fully trusted)
-  log_level: 'info'
+  id: "ChangeMe"
+  type: "EXTERNAL_IMPORT"
+  name: "Cofense"
+  scope: "Cofense"
+  log_level: "info"
+  confidence_level: 100
+  update_existing_data: true
+  interval: 86400
+  loop_interval: 600
+
+ironnet:
+  api_url: "https://www.threathq.com/apiv1"
+  api_key: "ChangeMe"
+  verify: true
+  create_indicators: true
+  create_ip_indicators: true
+  ip_indicator_valid_until: "P90D"  # 90 days

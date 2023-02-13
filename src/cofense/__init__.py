@@ -1,0 +1,1 @@
+"""Cofense ThreatHQ (Intelligence) Connector"""

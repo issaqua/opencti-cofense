@@ -12,8 +12,12 @@ services:
       - CONNECTOR_CONFIDENCE_LEVEL=100 # From 0 (Unknown) to 100 (Fully trusted)
       - CONNECTOR_UPDATE_EXISTING_DATA=false
       - CONNECTOR_LOG_LEVEL=info
-      - COFENSE_URL=http://localhost # Required
-      - COFENSE_KEY=ChangeMe # Required
-      - COFENSE_SSL_VERIFY=false # Required
+      - COFENSE_API_URL=https://www.threathq.com/apiv1 # Required
+      - COFENSE_API_USER=ChangeMe # Required
+      - COFENSE_API_PASS=ChangeMe # Required
+      - COFENSE_PROXY_URL=ChangeMe # Optional
+      - COFENSE_PROXY_USER=ChangeMe # Optional
+      - COFENSE_PROXY_PASS=ChangeMe # Required if COFENSE_PROXY_USER is defined (otherwise both will be ignored.)
+      - COFENSE_SSL_VERIFY=True # Optional, defaults to true
       - COFENSE_INTERVAL=60 # Required, in minutes
     restart: always
