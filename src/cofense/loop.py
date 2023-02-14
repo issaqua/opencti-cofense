@@ -26,7 +26,7 @@ class ConnectorLoop(threading.Thread):
         helper: OpenCTIConnectorHelper,
         interval: int,
         loop_interval: int,
-        callback: Callable[[str], None],
+        callback: Callable[[str, int], None],
         stop_on_error: bool = False,
     ) -> None:
         """
@@ -117,7 +117,7 @@ class ConnectorLoop(threading.Thread):
             )
 
             try:
-                self._callback(work_id)
+                self._callback(work_id, last_run.timestamp())  
             except Exception as ex:
                 log.exception("Unhandled exception processing connector feed: %s", ex)
                 self._helper.api.work.to_processed(work_id, f"Failed: {ex}", True)
