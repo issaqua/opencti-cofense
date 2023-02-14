@@ -17,8 +17,11 @@ ChangesetID: CHANGESETID_VERSION_STRING
 from __future__ import annotations
 
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Dict, Iterator, List
+
+from stix2elevator import elevate
+from stix2elevator.options import initialize_options, set_option_value
 
 import re
 import pydantic
@@ -27,11 +30,11 @@ import urllib3.exceptions
 from pydantic import BaseModel
 from requests import Response
 
-
-
 __all__ = [
     "CofenseClient",
-    "CofenseThreat",
+    "CofenseUpdateChangelogItem",
+    "CofenseUpdateData",
+    "CofenseUpdateModel",
 ]
 
 log = logging.getLogger(__name__)
@@ -43,7 +46,7 @@ class CofenseClient:
     def __init__(self, url: str, proxy_url: str, proxy_user: str, proxy_pass:str, api_user: str, api_pass: str, ssl_verify: bool = True):       
         """
         Constructor.
-        :param url: Cofense ThreatHQ url  (usually https://www.threathq.com/apiv1/)
+        :param url: Cofense ThreatHQ url  (default https://www.threathq.com/apiv1/)
         :param proxy_url: HTTP(S) proxy 
         :param proxy_user: HTTP(S) proxy username
         :param proxy_password: HTTP(S) proxy password
@@ -61,7 +64,7 @@ class CofenseClient:
             if proxy_user and proxy_pass:
                 proxy = re.sub('^https?:\/\/','', proxy_url)
                 proxy = "https://{}:{}@{}".format(proxy_user, proxy_pass, proxy)
-                self._proxy_url = { 'https' : proxy } # need to stick in array  TODO
+                self._proxy_url = { 'https' : proxy_url } # only support https proxy
             else:
                 self._proxy_url = { 'https' : proxy_url } # only support https proxy
         self._verify = ssl_verify
@@ -77,40 +80,94 @@ class CofenseClient:
         self._session.verify = ssl_verify
 
 
-    def query(self) -> Iterator[CofenseThreat]:
+    def queryUpdates(self, stamp: datetime) -> Iterator[CofenseUpdateChangelogItem]:
         """
         Process the feed URL and return any indicators.
         :return: Feed results
         """
-        resp: Response = self._session.get(self._api_url)
+
+        maxTimeDelta = datetime.utcnow() - timedelta(days = 365) # set to max one year ago (not bothering with leap years)
+
+        if stamp is None or (stamp - maxTimeDelta).timestamp() > 0:
+            stamp = datetime.utcnow() - timedelta(days = 365) # set to max one year ago (not bothering with leap years)
+            
+        self._session.params = { 'resultsPerPage': 100, 'sinceLastPublished': stamp.timestamp()}
+        
+        resp: Response = self._session.get(self._api_url + '/indicator/search')
         resp.raise_for_status()
 
-        result_type = Dict[
-            str,  # indicator
-            Dict[
-                str,  # port
-                List[CofenseThreat],
-            ],
-        ]
+        result_type = CofenseUpdateModel # Used https://jsontopydantic.com/ to build the models
         result = pydantic.parse_raw_as(result_type, resp.text)
-        for indicator, ports in result.items():
-            for port, entries in ports.items():
-                for entry in entries:
-                    yield entry
+        
+        cofenseResult = result.items()
 
-
-
+        ### Note if using /threat/updates
+        cofenseData = cofenseResult["data"]
+        cofenseChangelog = cofenseData["changelog"]
+        for changelog in cofenseChangelog:
+            for change in changelog:
+                yield change
     
+        ### Note if using /indicators/search
+        #cofenseData = cofenseResult["data"]
+        #cofenseIndicators = cofenseData["indicators"]
+        #for indicator in cofenseIndicators:
+        #    yield indicator
+
+    def queryThreat(self, threatType: str, threatId: int):
+        """
+        Process stix1 format threat data for a given threatId .
+        :param threatType: The type of threat we're processing (malware or phish)
+        :param threatId: The threat id we're going to get the stix1 data for.
+        :return: stix2 formatted threat data
+        """
+
+        initialize_options(options={"spec_version": "2.1"})
+
+        resp: Response = self._session.get(self._api_url + '/t3/' + threatType + '/' + threatId + '/stix')
+        resp.raise_for_status()
+
+        stix2result = elevate(resp.text)
+        return stix2result
 
 
-class CofenseThreat(BaseModel):
-    """Result item"""
 
+
+### Note if using indicators/search
+#class CofensePage(BaseModel):
+#    currentPage: int
+#    currentElements: int
+#    totalPages: int
+#    totalElements: int
+
+#class CofenseIndicator(BaseModel):
+#    ioc: str
+#    impact: str
+#    indicator_type: str
+#    threat_id: int
+#    report_type: str
+#    role: str
+
+#class CofenseData(BaseModel):
+#    page: CofensePage
+#    indicators: List[CofenseIndicator]
+
+
+#class CofenseModel(BaseModel):
+#    success: bool
+#    data: CofenseData    
+
+### note if using /threat/updates
+class CofenseUpdateChangelogItem(BaseModel):
     threatId: int
     threatType: str
-    occurredOn: datetime
+    occurredOn: int
     deleted: bool
-    indicatorLog: indicatorLog
 
+class CofenseUpdateData(BaseModel):
+    nextPosition: str
+    changelog: List[CofenseUpdateChangelogItem]
 
-
+class CofenseUpdateModel(BaseModel):
+    success: bool
+    data: CofenseUpdateData
