@@ -55,6 +55,8 @@ class CofenseClient:
         :param ssl_verify: Verify SSL connections
         """    
 
+        log.info("Made it to CofenseClient.__init__")
+
         if not url:
             raise ValueError("Cofense ThreatHQ URL must be set")
 
@@ -85,6 +87,8 @@ class CofenseClient:
         Process the feed URL and return any indicators.
         :return: Feed results
         """
+
+        log.info("Made it to CofenseClient.queryUpdates")
 
         maxTimeDelta = datetime.utcnow() - timedelta(days = 365) # set to max one year ago (not bothering with leap years)
 
@@ -121,6 +125,8 @@ class CofenseClient:
         :param threatId: The threat id we're going to get the stix1 data for.
         :return: stix2 formatted threat data
         """
+        
+        log.info("Made it to CofenseClient.queryThreat")
 
         initialize_options(options={"spec_version": "2.1"})
 
