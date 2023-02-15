@@ -13,6 +13,9 @@ WORKDIR /opt/build
 RUN apk add --no-cache git
 RUN pip3 install poetry
 
+# Copy Source files.
+COPY src ./src
+
 # Install package dependencies
 COPY pyproject.toml ./
 RUN poetry env use /usr/local/bin/python3 && \
@@ -20,11 +23,11 @@ RUN poetry env use /usr/local/bin/python3 && \
 RUN poetry env use /usr/local/bin/python3 && \
     poetry install --no-root --no-dev
 
+FROM python:3.10-alpine
+
 # Install package
 COPY src ./src
 RUN poetry install --no-dev 
-
-FROM python:3.10-alpine
 
 WORKDIR /opt/connector
 
