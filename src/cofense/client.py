@@ -64,9 +64,9 @@ class CofenseClient:
             if proxy_user and proxy_pass:
                 proxy = re.sub('^https?:\/\/','', proxy_url)
                 proxy = "https://{}:{}@{}".format(proxy_user, proxy_pass, proxy)
-                self._proxy_url = { 'https' : proxy_url } # only support https proxy
+                proxy_url = { 'https' : proxy_url } # only support https proxy
             else:
-                self._proxy_url = { 'https' : proxy_url } # only support https proxy
+                proxy_url = { 'https' : proxy_url } # only support https proxy
         self._verify = ssl_verify
 
         if not api_user or not api_pass:
@@ -74,7 +74,7 @@ class CofenseClient:
 
         self._api_url = url
         self._session = requests.Session()
-        if self._proxy_url:
+        if proxy_url:
             self._session.proxies.update(proxy_url)
         self._session.auth = (api_user, api_pass)
         self._session.verify = ssl_verify
@@ -88,7 +88,7 @@ class CofenseClient:
 
         maxTimeDelta = datetime.utcnow() - timedelta(days = 365) # set to max one year ago (not bothering with leap years)
 
-        if stamp is None or (stamp - maxTimeDelta).timestamp() > 0:
+        if stamp is None or DateTime.LessThan(stamp, maxTimeDelta):
             stamp = datetime.utcnow() - timedelta(days = 365) # set to max one year ago (not bothering with leap years)
             
         self._session.params = { 'resultsPerPage': 100, 'sinceLastPublished': stamp.timestamp()}

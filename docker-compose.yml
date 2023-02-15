@@ -1,7 +1,7 @@
 version: '3'
 services:
   connector-cofense:
-    image: opencti/connector-cofense:5.5.4
+    image: issaqua/connector-cofense:5.5.4
     environment:
       - OPENCTI_URL=http://localhost
       - OPENCTI_TOKEN=ChangeMe

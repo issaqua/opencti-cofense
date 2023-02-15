@@ -69,31 +69,33 @@ class CofenseConfig(BaseSettings):
         description="Cofense ThreatHQ API Password",
         env="COFENSE_API_PASS",
     )
-    verify: bool = Field(
+    proxy_url:str = Field(
+        description="Proxy URL (Optional)",
+        env="COFENSE_PROXY_URL",
+        default="",
+    )
+    proxy_user:str = Field(
+        description="Proxy User (Optional)",
+        env="COFENSE_PROXY_USER",
+        default="",
+    )
+    proxy_pass:str = Field(
+        description="Proxy Password (Optional)",
+        env="COFENSE_PROXY_PASS",
+        default="",
+    )
+    ssl_verify: bool = Field(
         description="Verify SSL connections to the Cofense API",
         env="COFENSE_VERIFY",
         default=True,
-    )
-    create_indicators: bool = Field(
-        description="Create indicators from observables",
-        env="COFENSE_CREATE_INDICATORS",
-        default=True,
-    )
-    create_ip_indicators: bool = Field(
-        description="Create IP indicators from observables",
-        env="COFENSE_CREATE_IP_INDICATORS",
-        default=False,
     )
     ip_indicator_valid_until: timedelta = Field(
         description="ISO8601 time-delta for how long indicators should be valid",
         env="COFENSE_INDICATOR_VALID_UNTIL",
         default=timedelta(days=90),
     )
-
     _validate_bools = validate_bool(
-        "verify",
-        "create_indicators",
-        "create_ip_indicators",
+        "ssl_verify",
     )
 
 
