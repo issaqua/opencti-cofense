@@ -87,8 +87,52 @@ class CofenseClient:
         self._session.auth = (api_user, api_pass)
 
 
-        
+    def queryUpdatesLoop(self, nextPosition: str) -> List[CofenseUpdateChangelogItem]:
+        """
+        Process the feed URL (nextPosition) and return any indicators.
+        :return: Feed results
+        """
 
+        log.info("Got to queryUpdatesLoop")
+
+        #TODO: I should verify inputs.
+
+        cofenseUpdateResult: CofenseUpdateModel
+        cofenseUpdateData: CofenseUpdateData
+        cofenseUpdateChangelog: List[CofenseUpdateChangelogItem]
+        cofenseUpdateChangelogAdditions: List[CofenseUpdateChangelogItem] = []
+        nextPositionStr: str = nextPosition
+        
+        while True:
+            self._session.params = { 'position': nextPositionStr } 
+        
+            resp: Response = self._session.post(self._api_url + '/threat/updates')
+            resp.raise_for_status()
+
+            cofenseUpdateResult = pydantic.parse_raw_as(CofenseUpdateModel, resp.text)
+
+            if not cofenseUpdateResult.success:  # we failed somehow.
+                log.info("queryUpdatesLoop: Success was not true")
+                break
+        
+            cofenseUpdateData = cofenseUpdateResult.data
+            cofenseUpdateChangelog = cofenseUpdateData.changelog
+
+            # have to handle condition where there are no results.  # TODO: Check caller can handle None result.
+            if cofenseUpdateChangelog is [] or cofenseUpdateChangelog is None:
+                log.info("There were no additional threat updates.")
+                break
+
+            log.info("CofenseUpdatesLoop: We found [" + str(len(cofenseUpdateChangelog)) + "] additional changelog items.")
+
+            cofenseUpdateChangelogAdditions.extend(cofenseUpdateChangelog)  
+            
+            if (len(cofenseUpdateChangelog) == 1000):       # If we've got 1000, we have more...
+                nextPositionStr = cofenseUpdateData.nextPosition
+            else:
+                break
+
+        return cofenseUpdateChangelogAdditions
 
     def queryUpdates(self, stamp: datetime) -> List[CofenseUpdateChangelogItem]:  # could change to list of these
         """
@@ -120,8 +164,6 @@ class CofenseClient:
         cofenseUpdateResult: CofenseUpdateModel
         cofenseUpdateResult = pydantic.parse_raw_as(CofenseUpdateModel, resp.text)
         
-#### NOTE: I have to make this process handle multiple pages!!
-
         if not cofenseUpdateResult.success:  # we failed somehow.
             log.info("Success was not true")
             return
@@ -137,9 +179,14 @@ class CofenseClient:
             log.info("There were no threat updates.")
             return  ## TODO: Not sure if this is the right way to break out of the iteration.
 
-        log.info("1. We found [" + str(len(cofenseUpdateChangelog)) + "] changelog items.")
+        log.info("1. We found [" + str(len(cofenseUpdateChangelog)) + "] initial changelog items.")
+
+        if (len(cofenseUpdateChangelog) == 1000):       # If we've got 1000, we have more...
+            nextPositionStr: str = cofenseUpdateData.nextPosition
+            cofenseUpdateChangelog.extend(self.queryUpdatesLoop(nextPositionStr))
+
         return cofenseUpdateChangelog  # For each changelog item
-            
+
     def queryThreat(self, threatType: str, threatId: int):
         """
         Process stix1 format threat data for a given threatId .
