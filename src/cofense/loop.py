@@ -108,8 +108,7 @@ class ConnectorLoop(threading.Thread):
         # Check the difference between now and the last run to the interval
         if (now - last_run).total_seconds() > self._interval:
             log.info("Connector will now run")
-            last_run = now
-
+            
             name = self._helper.connect_name or "Connector"
             work_id = self._helper.api.work.initiate_work(
                 self._helper.connect_id,
@@ -117,7 +116,7 @@ class ConnectorLoop(threading.Thread):
             )
 
             try:
-                self._callback(work_id, last_run.timestamp())  
+                self._callback(work_id, last_run)  
             except Exception as ex:
                 log.exception("Unhandled exception processing connector feed: %s", ex)
                 self._helper.api.work.to_processed(work_id, f"Failed: {ex}", True)
@@ -129,9 +128,10 @@ class ConnectorLoop(threading.Thread):
             state = self._helper.get_state() or {}
 
             # Store the start time as the last run
+            last_run = now  
             state["last_run"] = int(now.timestamp())
             self._helper.set_state(state)
-
+            
             next_run = last_run + timedelta(seconds=self._interval)
             delta_now = next_run - datetime.utcnow().replace(microsecond=0)
             log.info("Last_run stored, next run in %s (%s)", delta_now, next_run)

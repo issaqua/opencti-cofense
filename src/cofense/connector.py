@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 from collections import Counter
 from datetime import date, datetime
@@ -15,7 +16,7 @@ from pycti import Indicator
 from pycti.connector.opencti_connector_helper import OpenCTIConnectorHelper
 from stix2.v21 import _Observable as Observable  # noqa
 
-from .client import CofenseClient
+from .client import CofenseClient, CofenseUpdateChangelogItem
 from .config import RootConfig
 from .loop import ConnectorLoop
 
@@ -23,7 +24,7 @@ __all__ = [
     "CofenseConnector",
 ]
 
-#log = logging.getLogger(__name__)
+log = logging.getLogger(__name__)
 
 
 class CofenseConnector:
@@ -79,12 +80,29 @@ class CofenseConnector:
         :param work_id: Work ID
         :return: None
         """
+
+        log.info("The process feed timestamp is: " + str(timestamp))
+
         bundle_objects = []
 
-        results = self._client.queryUpdates(timestamp)
-        for result in results:
-            stix2result = self._client.queryThreat(result.threatType, result.threatId)
+        changelogs: List[CofenseUpdateChangelogItem]
+        changelogs = self._client.queryUpdates(timestamp)
+
+        log.info("2. We found [" + str(len(changelogs)) + "] changelog items.")
+
+        for changelog in changelogs:
+            if changelog.deleted:
+                log.info("Threat id [" + str(changelog.threatId) + "] is a deleted changelog")
+                continue
+            else:
+                log.info("Threat id [" + str(changelog.threatId) + "] is active.")
+
+            stix2result = self._client.queryThreat(changelog.threatType, changelog.threatId)
             
+            if stix2result is None or not stix2result or stix2result == "":
+                log.info("The stix2result is None/empty")
+                continue
+
             bundle_objects = json.loads(stix2result)["objects"]
 
             self._helper.send_stix2_bundle(
