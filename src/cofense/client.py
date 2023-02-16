@@ -30,6 +30,10 @@ import urllib3.exceptions
 from pydantic import BaseModel
 from requests import Response
 
+import html
+import xml.etree.ElementTree as ET
+
+
 __all__ = [
     "CofenseClient",
     "CofenseUpdateChangelogItem",
@@ -60,64 +64,82 @@ class CofenseClient:
         if not url:
             raise ValueError("Cofense ThreatHQ URL must be set")
 
+        self._session = requests.Session()
+
         self._api_url = url
         
-        if proxy_url:
-            if proxy_user and proxy_pass:
-                proxy = re.sub('^https?:\/\/','', proxy_url)
-                proxy = "https://{}:{}@{}".format(proxy_user, proxy_pass, proxy)
-                proxy_url = { 'https' : proxy_url } # only support https proxy
-            else:
-                proxy_url = { 'https' : proxy_url } # only support https proxy
-        self._verify = ssl_verify
+#        if proxy_url:
+#            if proxy_user and proxy_pass:
+#                proxy = re.sub('^https?:\/\/','', proxy_url)
+#                proxy = "https://{}:{}@{}".format(proxy_user, proxy_pass, proxy)
+#                proxy_url = { 'https' : proxy_url } # only support https proxy
+#            else:
+#                proxy_url = { 'https' : proxy_url } # only support https proxy
+#        
+#            self._session.proxies.update(proxy_url)
+        
+        self._ssl_verify = ssl_verify
+        self._session.verify = ssl_verify
 
         if not api_user or not api_pass:
             raise ValueError("Cofense ThreatHQ API id and key must be set")
 
-        self._api_url = url
-        self._session = requests.Session()
-        if proxy_url:
-            self._session.proxies.update(proxy_url)
         self._session.auth = (api_user, api_pass)
-        self._session.verify = ssl_verify
 
 
-    def queryUpdates(self, stamp: datetime) -> Iterator[CofenseUpdateChangelogItem]:
+        
+
+
+    def queryUpdates(self, stamp: datetime) -> List[CofenseUpdateChangelogItem]:  # could change to list of these
         """
         Process the feed URL and return any indicators.
         :return: Feed results
         """
 
         log.info("Made it to CofenseClient.queryUpdates")
+        log.info("1. stamp is " + str(stamp))
 
-        maxTimeDelta = datetime.utcnow() - timedelta(days = 365) # set to max one year ago (not bothering with leap years)
+        maxTimeDelta = datetime.utcnow() - timedelta(days = 180) # set to max one year ago (not bothering with leap years)
 
-        if stamp is None or DateTime.LessThan(stamp, maxTimeDelta):
-            stamp = datetime.utcnow() - timedelta(days = 365) # set to max one year ago (not bothering with leap years)
-            
-        self._session.params = { 'resultsPerPage': 100, 'sinceLastPublished': stamp.timestamp()}
+        if stamp is None or (stamp < maxTimeDelta):
+            stamp = maxTimeDelta # set to max one year ago (not bothering with leap years)
+
+        log.info("2. stamp is " + str(stamp))
+
+        epochSecs = round((stamp - datetime(1970,1,1)).total_seconds())  # need a better option here.
+
+        log.info("3. epochSecs is " + str(epochSecs))
+
+        self._session.params = { 'timestamp': epochSecs } 
         
-        resp: Response = self._session.get(self._api_url + '/indicator/search')
+        resp: Response = self._session.post(self._api_url + '/threat/updates')
         resp.raise_for_status()
 
-        result_type = CofenseUpdateModel # Used https://jsontopydantic.com/ to build the models
-        result = pydantic.parse_raw_as(result_type, resp.text)
+#        result_type = CofenseUpdateModel # Used https://jsontopydantic.com/ to build the models
+
+        cofenseUpdateResult: CofenseUpdateModel
+        cofenseUpdateResult = pydantic.parse_raw_as(CofenseUpdateModel, resp.text)
         
-        cofenseResult = result.items()
+#### NOTE: I have to make this process handle multiple pages!!
 
-        ### Note if using /threat/updates
-        cofenseData = cofenseResult["data"]
-        cofenseChangelog = cofenseData["changelog"]
-        for changelog in cofenseChangelog:
-            for change in changelog:
-                yield change
-    
-        ### Note if using /indicators/search
-        #cofenseData = cofenseResult["data"]
-        #cofenseIndicators = cofenseData["indicators"]
-        #for indicator in cofenseIndicators:
-        #    yield indicator
+        if not cofenseUpdateResult.success:  # we failed somehow.
+            log.info("Success was not true")
+            return
+        
+        cofenseUpdateData: CofenseUpdateData
+        cofenseUpdateData = cofenseUpdateResult.data
 
+        cofenseUpdateChangelog: List[CofenseUpdateChangelogItem]
+        cofenseUpdateChangelog = cofenseUpdateData.changelog
+
+        # have to handle condition where there are no results.  # TODO: Check caller can handle None result.
+        if cofenseUpdateChangelog is [] or cofenseUpdateChangelog is None:
+            log.info("There were no threat updates.")
+            return  ## TODO: Not sure if this is the right way to break out of the iteration.
+
+        log.info("1. We found [" + str(len(cofenseUpdateChangelog)) + "] changelog items.")
+        return cofenseUpdateChangelog  # For each changelog item
+            
     def queryThreat(self, threatType: str, threatId: int):
         """
         Process stix1 format threat data for a given threatId .
@@ -126,44 +148,29 @@ class CofenseClient:
         :return: stix2 formatted threat data
         """
         
-        log.info("Made it to CofenseClient.queryThreat")
+        log.debug("Made it to CofenseClient.queryThreat: Type=" + threatType + "and threatId=" + str(threatId) )
 
-        initialize_options(options={"spec_version": "2.1"})
-
-        resp: Response = self._session.get(self._api_url + '/t3/' + threatType + '/' + threatId + '/stix')
+        resp: Response = self._session.get(self._api_url + '/t3/' + threatType + '/' + str(threatId) + '/stix')
         resp.raise_for_status()
+        
+        if resp.text is None or not resp.text or resp.text == "" or resp.text.isspace():
+            log.debug("Response text is None/Empty")
+            return
+        else:
+            log.debug("Response text is" + resp.text)
 
-        stix2result = elevate(resp.text)
-        return stix2result
+            try:
+                initialize_options()
+                stix2result = elevate(resp.content)
+            except Exception as ex:
+                log.exception("Unhandled exception in connector loop: %s", ex)
+                return
 
+            log.debug("Returning stix2result")
 
-
-
-### Note if using indicators/search
-#class CofensePage(BaseModel):
-#    currentPage: int
-#    currentElements: int
-#    totalPages: int
-#    totalElements: int
-
-#class CofenseIndicator(BaseModel):
-#    ioc: str
-#    impact: str
-#    indicator_type: str
-#    threat_id: int
-#    report_type: str
-#    role: str
-
-#class CofenseData(BaseModel):
-#    page: CofensePage
-#    indicators: List[CofenseIndicator]
+            return stix2result
 
 
-#class CofenseModel(BaseModel):
-#    success: bool
-#    data: CofenseData    
-
-### note if using /threat/updates
 class CofenseUpdateChangelogItem(BaseModel):
     threatId: int
     threatType: str
